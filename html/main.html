@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>UrCat and UrPet</title>
+		<style>
+			body{
+				background: url("../banner/banner.jpg");
+				background-size: cover;
+				overflow: hidden;
+				position: relative;
+				font-family: times new roman;
+			}
+			form{
+				position: absolute;
+				width: 50%;
+				margin: 100px;
+			}
+			fieldset{
+				border: 0;
+			}
+			label{
+				font-size: 30px;
+			}
+			input{
+				border: 0px;
+				padding: 15px 20px;
+				font-size: 15px;
+			}
+			input[type="submit"]{
+				color: white;
+				background: red;
+			}
+			
+		</style>
+	</head>
+	<body>
+		<form action="search" method="get">
+			<fieldset>
+				<label for="animals">Type of animal:</label>
+				<input id="animals" name="animals" type="text" />
+				<input type="submit" value="Search" />
+			</fieldset>
+		</form>
+	</body>
+</html>
