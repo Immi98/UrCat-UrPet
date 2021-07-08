@@ -1,39 +1,33 @@
-const http = require("http");
-const server = http.createServer();
-const port = 3000;
-const fs = require("fs");
-const url = require("url");
 const https = require("https");
 const querystring = require("querystring");
-const credentials = require('./auth/credentials.json');
+const credentials = require('./auth/credentials.json');//credentials is a js obj
+const url = require("url");
+const fs = require("fs");
+const http = require("http");
+const port = 3000;
+const server = http.createServer();
 
 server.on("listening", listening_handler);
 server.listen(port);
 function listening_handler(){
-	console.log(`Now listen on port ${port}`);
+	console.log(`Now Listening on Port ${port}`);
 }
 
 server.on("request", connection_handler);
-
-//if the user's input is vaid, the server first makes a post request to PetFinder API to request an access_token 
+//if the user's input is valid, the server first make a post request to PetFinder API to request an access_token 
 function connection_handler(req, res){
-	console.log(`New request for ${req.url} from ${req.socket.remoteAddress}`);
+	console.log(`New Request for ${req.url} from ${req.socket.remoteAddress}`);
 	if (req.url === "/"){
-		const html_main = fs.createReadStream("html/main.html");
+		const main = fs.createReadStream("html/main.html");
 		res.writeHead(200, {"Content-Type":"text/html"});
-		html_main.pipe(res);
-	}
-	else if (req.url === "/banner/banner.jpg"){
-		const banner = fs.createReadStream("banner/banner.jpg");
-		res.writeHead(200, {'Content-Type':'image/jpeg'});
-		banner.pipe(res);
+		main.pipe(res);
 	}
 	else if (req.url.startsWith("/search")){
-		const input = url.parse(req.url, true).query; //take an url object return a js object
+		const user_input = url.parse(req.url, true).query; //take an url object return a js object 
 		console.log("Performing PetFinder API request");
 		//POST method 
-		const auth_cache = "./cache/auth-res.json";
-		cache_access_token(auth_cache, input, res);
+		const authentication_cache = "./cache/authentication-res.json";
+		cache_access_token(authentication_cache, user_input, res);
 	}
 	else {
 		res.writeHead(404, {"Content-Type":"text/plain"});
@@ -45,12 +39,12 @@ function connection_handler(req, res){
 //check if the access token is expired or not 
 //if it is expired, request a new one
 //if it is not expired, move to send_access_token_req
-function cache_access_token(auth_cache, input, res){
+function cache_access_token(authentication_cache, user_input, res){
 	let cache_valid = false;
-	let cache_auth_file = "";
-	if (fs.existsSync(auth_cache)){
-		cache_auth_file = require(auth_cache);
-		if (new Date(cache_auth_file.expiration) > Date.now()){
+	let cached_auth = "";
+	if (fs.existsSync(authentication_cache)){
+		cached_auth = require(authentication_cache);
+		if (new Date(cached_auth.expiration) > Date.now()){
 			cache_valid = true;
 		}
 		else {
@@ -59,15 +53,15 @@ function cache_access_token(auth_cache, input, res){
 	}
 	if (cache_valid){
 		console.log("Token is not expired yet");
-		start_search_req(cache_auth_file, input, res);
+		create_search_req(cached_auth, user_input, res);
 	}
 	else{
-		send_access_token_req(auth_cache, input, res);
+		send_access_token_request(authentication_cache, user_input, res);
 	}
 }
 
 //Send a POST request to the PetFinder API to ask for an access token 
-function send_access_token_req(auth_cache, input, res){
+function send_access_token_request(authentication_cache, user_input, res){
 	let base64data = Buffer.from(`${credentials.client_id}:${credentials.client_secret}`).toString('base64');
 	let authorization = `Basic ${base64data}`;
 	
@@ -84,50 +78,50 @@ function send_access_token_req(auth_cache, input, res){
 	};
 	const token_endpoint = 'https://api.petfinder.com/v2/oauth2/token';
 	let auth_sent_time = new Date(); //create a new Date object which represents the current date and time as of the time of instantiation.
-	let auth_req = https.request(token_endpoint, options, function (auth_res){
-		received_auth(auth_cache, auth_res, input, auth_sent_time, res);
+	let authentication_req = https.request(token_endpoint, options, function (authentication_res){
+		received_authentication(authentication_cache, authentication_res, user_input, auth_sent_time, res);
 	});
 	
-	auth_req.on('error', function(e){
+	authentication_req.on('error', function(e){
 		console.error(e);
 	});
 	console.log("Requesting Token");
-	auth_req.end(post_data);//because this is a POST request, querystring is placed into the body of the request
+	authentication_req.end(post_data);//because this is a POST request, querystring is placed into the body of the request
 }
 
-//catch the access token 
-function received_auth(auth_cache, auth_res, input, auth_sent_time, res){
-	auth_res.setEncoding("utf8");
+//catch the access token that is responed from the API
+function received_authentication(authentication_cache, authentication_res, user_input, auth_sent_time, res){
+	authentication_res.setEncoding("utf8");
 	let body = "";
-	auth_res.on("data", function(chunk){
+	authentication_res.on("data", function(chunk){
 		body += chunk;
 	});
-	auth_res.on("end", function(){
+	authentication_res.on("end", function(){
 		let petFinder_auth = JSON.parse(body);//convert from JSON to js obj
 		petFinder_auth.expiration = (new Date(new Date(auth_sent_time).getTime() + (60*60*1000)).toJSON());//calculate the time the token expires (1hr from auth_sent_time)
-		create_access_token_cache(auth_cache, petFinder_auth);
-		start_search_req(petFinder_auth, input, res);
+		create_access_token_cache(authentication_cache, petFinder_auth);
+		create_search_req(petFinder_auth, user_input, res);
 	});
 }
 
 //create a JSON file that contains the access_token and its expiration time
-function create_access_token_cache(auth_cache, petFinder_auth){
+function create_access_token_cache(authentication_cache, petFinder_auth){
 	let petFinder_auth_json = JSON.stringify(petFinder_auth);//convert js obj to JSON string
-	fs.writeFile(auth_cache, petFinder_auth_json, function(err){//write petFinder_auth_json to authentication_cache
+	fs.writeFile(authentication_cache, petFinder_auth_json, function(err){//write petFinder_auth_json to authentication_cache
 		if (err)throw err;
 	});
 }
 
 //Send a GET request to the PetFinder API to request for the type of animal related to the users search query
-function start_search_req(petFinder_auth, input, res){
+function create_search_req(petFinder_auth, user_input, res){
 	let query = querystring.stringify({//convert from js obj to query string
-		type:`${input.animals}`
+		type:`${user_input.animals}`
 	});
 	let access_token = `Bearer ${petFinder_auth.access_token}`;
 	
 	const animals_endpoint = `https://api.petfinder.com/v2/animals?${query}`;
 	let animals_req = https.request(animals_endpoint, {method:"GET", headers:{'Authorization':`${access_token}`}}, function (animals_res){
-		received_animals(animals_res, input, res);
+		received_animals(animals_res, user_input, res);
 	});
 	
 	animals_req.on('error', function(er){
@@ -138,7 +132,7 @@ function start_search_req(petFinder_auth, input, res){
 }
 
 //Catch the information of each animal 
-function received_animals(animals_res, input, res){
+function received_animals(animals_res, user_input, res){
 	animals_res.setEncoding("utf8");
 	let body = "";
 	animals_res.on("data", function(chunk){
@@ -160,16 +154,16 @@ function received_animals(animals_res, input, res){
 				status:`${animals_info.animals[i].status}`
 			}
 		}
-		get_cat_fact(animals_array, input, res);
+		get_cat_fact(animals_array, user_input, res);
 	});
 }
 
 //Send the GET request to the CatFact API to request for a random cat fact
-function get_cat_fact(animals_array, input, res){
+function get_cat_fact(animals_array, user_input, res){
 	let max_length = Math.floor(Math.random() * 200) + 20; // returns a random integer from 20 to 219
 	const cat_fact_endpoint = `https://catfact.ninja/fact?max_length=${max_length}`;
 	const cat_fact_req = https.request(cat_fact_endpoint, {method:"GET", headers:{"Accept":"application/json"}}, function (cat_fact_res){
-		received_fact(cat_fact_res, animals_array, input, res);
+		received_fact(cat_fact_res, animals_array, user_input, res);
 	});
 	
 	cat_fact_req.on('error', function(e){
@@ -181,7 +175,7 @@ function get_cat_fact(animals_array, input, res){
 }
 
 //Catch the random cat fact from the data received from the Cat Fact API
-function received_fact(cat_fact_res, animals_array, input, res){
+function received_fact(cat_fact_res, animals_array, user_input, res){
 	let fact_data = "";
 	cat_fact_res.on("data", function(chunk){
 		fact_data += chunk;
@@ -189,13 +183,13 @@ function received_fact(cat_fact_res, animals_array, input, res){
 	cat_fact_res.on("end", function(){
 		let fact_obj = JSON.parse(fact_data);//convert a JSON string to a js obj
 		let fact = fact_obj.fact;
-		webpage(fact, animals_array, input, res);
+		generate_webpage(fact, animals_array, user_input, res);
 	});
 }
 
 //Collect all data from the two APIs and display them onto a webpage
 //Then send the webpage to the client 
-function webpage(fact, animals_array, input, res){
+function generate_webpage(fact, animals_array, user_input, res){
 	let count = 0;
 	let display_animals = [];
 	for (let i = 0; i < animals_array.length; i++){
@@ -210,6 +204,6 @@ function webpage(fact, animals_array, input, res){
 	}
 	res.writeHead(200, {'Content-Type':'text/html'});
 	res.end(`<h1>A Random Cat Fact:</h1><div>${fact}</div>
-			 <h1>Search Results for ${input.animals}</h1>${display_animals.join("")}`
+			 <h1>Search Results for ${user_input.animals}</h1>${display_animals.join("")}`
 	);// send all the information to the client 
 }
